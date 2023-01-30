@@ -48,39 +48,64 @@ socket.on('board_update', board => {
     console.log(`${board[6]} ${board[7]} ${board[8]}`);
 });
 
-// listen for 'game_start' events to let the user know the game has started.
-// the server will tell us which player we are: either 'first' or 'second'.
-socket.on('game_start', ordinal => {
-    console.log(`Game started. You are ${ordinal} player.`); 
-    console.log("When it's your turn, enter a number to place a symbol on the board:");
-    console.log(`1 2 3`);
-    console.log(`4 5 6`);
-    console.log(`7 8 9`);
-});
-
-// listen for 'turn' events. when a turn event is received, we know that it is
-// this player's turn. prompt the user for their next move. if `retryReason` has
-// a value, we'll print the value to let the user know they need to enter a
-// valid number.
-const readcommand = require('readcommand');
-socket.on('turn', retryReason => {
-    console.log(retryReason || 'your turn.');
-    readcommand.read((err, args) => {
-        if (err) {
-            // if there was an error reading input, let the server know
-            socket.emit('turn_error', err);
-        } else {
-            // emit an event saying we took our turn and would like the server
-            // to validate and accept our move
-            socket.emit('turn_taken', args[0]);
-        }
-    });
-});
-
 // listen for 'game_over' events. the server will tell us either the winner,
 // there was a tie, or there was a resignation. we will disconnect from the
 // server.
 socket.on('game_over', reason => {
     console.log(`Game ${reason}.`);
     socket.disconnect();
+});
+
+// listen for 'turn' events. when a turn event is received, we know
+// that it is this player's turn and will set `isTurn` to true. if
+// `retryReason` has a value, we'll print the value to let the user know they
+// need to enter a valid number.
+let isTurn = false;
+socket.on('turn', retryReason => {
+    isTurn = true;
+    console.log(retryReason || 'your turn.');
+});
+
+// finally, listen for 'game_start' events to let the user know the game has started.
+// the server will tell us which player we are: either 'first' or 'second'.
+// then, we can prompt the user for commands/moves (if it's their turn).
+socket.on('game_start', ordinal => {
+    console.log(`Game started. You are ${ordinal} player.`);
+    console.log("When it's your turn, enter a number to place a symbol on the board:");
+    console.log(`1 2 3`);
+    console.log(`4 5 6`);
+    console.log(`7 8 9`);
+
+    // prompt for commands from the user.
+    const readcommand = require('readcommand');
+    readcommand.loop((err, args, _, next) => {
+        if (args[0] == 'r') {
+            // if the player decides to resign, let the server know this player has
+            // resigned
+            socket.emit('resign');
+        } else if (isTurn) {
+            // otherwise, if it's the player's turn, we can send their commands to
+            // the server.
+            if (err) {
+                // if there was an error reading input (probably because the user
+                // terminated the program), let the server know
+                socket.emit('turn_error', err);
+            } else {
+                // emit an event saying we took our turn and would like the server
+                // to validate and accept our move
+                socket.emit('turn_taken', args[0], () => {
+                    // signal that we're ready for the next command once the
+                    // server has received our last command
+                    next();
+                });
+            }
+            isTurn = false;
+        } else {
+            // if it's not the player's turn, let them know to wait
+            console.error("it's not your turn yet!");
+
+            // then let the player submit another command anyways
+            next();
+        }
+    });
 });

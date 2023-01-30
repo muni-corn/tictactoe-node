@@ -142,21 +142,24 @@ function checkForGameOver() {
 
 // sets up sockets with common events to listen to.
 function setupSocket(socket, symbol) {
-    // give the win to the other player if one disconnects
+    // convenience variable to de-dupe some code. is the ordinal ('first' or
+    // 'second') of the *other* player, or the opponent of whoever owns
+    // `symbol`
+    let otherPlayerOrdinal = symbol == 'x' ? 'second' : 'first';
+
+    // give the win to the other player if one disconnects...
     socket.on('disconnect', () => {
-            // if 'x' disconnects, 'o' (second) wins.
-        announceWinnerByDisconnection(symbol == 'x' ? 'second' : 'first');
+        announceWinnerByDisconnection(otherPlayerOrdinal);
+    });
+
+    // ...or resigns.
+    socket.on('resign', () => {
+        announceWinnerByResignation(otherPlayerOrdinal);
     });
 
     // listen for events emitted by the client when they've taken their turn.
-    socket.on('turn_taken', position => {
-        // check if position is 'r' for resignation
-        if (position == 'r') {
-            // if 'x' resigns, 'o' (second) wins.
-            announceWinnerByResignation(symbol == 'x' ? 'second' : 'first');
-        }
-
-        // try to parse position as a number decrememt position for zero-based goodness.
+    socket.on('turn_taken', (position, next) => {
+        // try to parse position as a number and decrememt for zero-based goodness.
         position = Number(position) - 1;
         if (isNaN(position)) {
             // if the number can't be parsed, let the user know to try again.
@@ -185,6 +188,18 @@ function setupSocket(socket, symbol) {
                 }
             }
         }
+
+        // let the client know it can submit input again
+        next();
+    });
+
+    // listen for `turn_error` events from the client. this is emitted when
+    // `readcommand` is unable to read input from the user. if we can't get
+    // input from the user, we'll just (be brutal and) assume they disconnected.
+    socket.on('turn_error', err => {
+        const ordinal = symbol == 'x' ? 'first' : 'second';
+        console.error(`${ordinal} player had an error with input (${err}). assuming disconnection.`);
+        announceWinnerByDisconnection(otherPlayerOrdinal);
     });
 }
 
