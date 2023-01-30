@@ -1,0 +1,10 @@
+{
+  "name": "shardeum-nodejs-tic-tac-toe",
+  "version": "0.0.1",
+  "description": "nodejs test for shardeum",
+  "dependencies": {
+    "readcommand": "^0.4.0",
+    "socket.io": "^4.5.4",
+    "socket.io-client": "^4.5.4"
+  }
+}
